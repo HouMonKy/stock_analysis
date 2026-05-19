@@ -28,9 +28,17 @@ concurrency:
   group: stock-analysis
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    outputs:
+      has_reports: ${{ steps.report_site.outputs.has_reports }}
     # 添加超时限制，防止任务卡死
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
     
@@ -468,6 +476,26 @@ jobs:
             reports/
             logs/
           retention-days: 30
+
+      - name: 生成 HTML 报告站点
+        id: report_site
+        if: always()
+        run: |
+          python scripts/build_report_site.py \
+            --reports-dir reports \
+            --output-dir reports-site \
+            --site-title "每日股票分析报告" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v6
+        if: steps.report_site.outputs.has_reports == 'true'
+
+      - name: 上传 Pages 站点
+        uses: actions/upload-pages-artifact@v5
+        if: steps.report_site.outputs.has_reports == 'true'
+        with:
+          path: reports-site
       
       - name: 显示运行结果
         if: always()
@@ -482,8 +510,26 @@ jobs:
           else
             echo "⚠️ 未生成报告文件"
           fi
+          if [ "${{ steps.report_site.outputs.has_reports }}" = "true" ]; then
+            echo "🌐 HTML 报告站点将发布到 GitHub Pages"
+            echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          else
+            echo "🌐 未生成报告文件，跳过 GitHub Pages 发布"
+          fi
           echo ""
           if [ -f "logs/stock_analysis_$(date +%Y%m%d).log" ]; then
             echo "📜 最近日志（最后 30 行）:"
             tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
           fi
+
+  deploy-pages:
+    needs: analyze
+    if: needs.analyze.outputs.has_reports == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布 Pages 站点
+        id: deployment
+        uses: actions/deploy-pages@v5
