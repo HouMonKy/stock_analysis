@@ -477,15 +477,50 @@ jobs:
             logs/
           retention-days: 30
 
+      - name: 恢复历史报告归档
+        uses: actions/cache/restore@v4
+        if: always()
+        with:
+          path: reports-archive
+          key: report-archive-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            report-archive-
+
+      - name: 合并本次报告到历史归档
+        id: report_archive
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p reports-archive
+          current_count=0
+          stamp="$(TZ='Asia/Shanghai' date '+%Y%m%d-%H%M%S')"
+          shopt -s nullglob
+          for file in reports/*.md; do
+            name="$(basename "$file" .md)"
+            dest="reports-archive/${name}_${stamp}_run-${GITHUB_RUN_NUMBER}_attempt-${GITHUB_RUN_ATTEMPT}.md"
+            cp "$file" "$dest"
+            current_count=$((current_count + 1))
+          done
+          archive_count="$(find reports-archive -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')"
+          echo "current_report_count=$current_count" >> "$GITHUB_OUTPUT"
+          echo "archive_report_count=$archive_count" >> "$GITHUB_OUTPUT"
+
       - name: 生成 HTML 报告站点
         id: report_site
         if: always()
         run: |
           python scripts/build_report_site.py \
-            --reports-dir reports \
+            --reports-dir reports-archive \
             --output-dir reports-site \
             --site-title "每日股票分析报告" \
             --github-output "$GITHUB_OUTPUT"
+
+      - name: 保存历史报告归档
+        uses: actions/cache/save@v4
+        if: always() && steps.report_archive.outputs.archive_report_count != '0'
+        with:
+          path: reports-archive
+          key: report-archive-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: 配置 GitHub Pages
         uses: actions/configure-pages@v6
@@ -513,6 +548,7 @@ jobs:
           if [ "${{ steps.report_site.outputs.has_reports }}" = "true" ]; then
             echo "🌐 HTML 报告站点将发布到 GitHub Pages"
             echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+            echo "📚 历史报告总数: ${{ steps.report_archive.outputs.archive_report_count }}"
           else
             echo "🌐 未生成报告文件，跳过 GitHub Pages 发布"
           fi
