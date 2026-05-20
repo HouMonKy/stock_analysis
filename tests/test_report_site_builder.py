@@ -23,8 +23,8 @@ build_report_site = importlib.import_module("build_report_site")
 def test_build_report_site_creates_index_and_report_pages(tmp_path: Path) -> None:
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
-    (reports_dir / "report_20260519.md").write_text(
-        "# 股票分析报告\n\n| 代码 | 建议 |\n| --- | --- |\n| 600519 | 持有 |",
+    (reports_dir / "report_20260519_20260519-183000_run-1_attempt-1.md").write_text(
+        "# 🎯 2026-05-19 决策仪表盘\n\n## 📊 汇总\n\n🎯 **贵州茅台(600519)**: 持有 | 评分 72",
         encoding="utf-8",
     )
     (reports_dir / "market_review_20260519.md").write_text(
@@ -46,12 +46,31 @@ def test_build_report_site_creates_index_and_report_pages(tmp_path: Path) -> Non
     index = (output_dir / "index.html").read_text(encoding="utf-8")
     assert "最新股票分析报告" in index
     assert "最新大盘分析报告" in index
-    assert "reports/report_20260519.html" in index
+    assert "贵州茅台(600519) - 2026-05-19 18:30" in index
+    assert "reports/report_20260519_20260519-183000_run-1_attempt-1.html" in index
     assert "reports/market_review_20260519.html" in index
     assert (output_dir / ".nojekyll").exists()
-    assert (output_dir / "reports" / "report_20260519.html").exists()
+    assert (output_dir / "reports" / "report_20260519_20260519-183000_run-1_attempt-1.html").exists()
     assert (output_dir / "reports" / "market_review_20260519.html").exists()
     assert "has_reports=true" in github_output.read_text(encoding="utf-8")
+
+
+def test_build_report_site_names_multi_stock_reports_from_stock_labels(tmp_path: Path) -> None:
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    (reports_dir / "report_20260520_20260520-235602_run-2_attempt-1.md").write_text(
+        "# 🎯 2026-05-20 决策仪表盘\n\n"
+        "🎯 **中科曙光(603019)**: 持有 | 评分 68\n"
+        "🟡 **贵州茅台(600519)**: 观望 | 评分 60\n"
+        "🔴 **宁德时代(300750)**: 减仓 | 评分 42\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "site"
+    build_report_site.build_report_site(reports_dir=reports_dir, output_dir=output_dir)
+
+    index = (output_dir / "index.html").read_text(encoding="utf-8")
+    assert "中科曙光(603019)、贵州茅台(600519)、宁德时代(300750) - 2026-05-20 23:56" in index
 
 
 def test_build_report_site_escapes_raw_html(tmp_path: Path) -> None:

@@ -16,6 +16,10 @@ from zoneinfo import ZoneInfo
 
 
 REPORT_DATE_RE = re.compile(r"(?P<date>\d{8})")
+REPORT_TIMESTAMP_RE = re.compile(r"(?P<stamp>\d{8}-\d{6})")
+STOCK_LABEL_RE = re.compile(
+    r"\*\*(?P<name>[^*\n()（）]{1,80})\s*[(（](?P<code>[A-Za-z0-9._-]{2,20})[)）]\*\*"
+)
 SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 MARKDOWN_EXTRAS = ["tables", "fenced-code-blocks", "break-on-newline", "cuddled-lists"]
 
@@ -77,6 +81,41 @@ def _format_report_date(path: Path) -> str:
     return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
 
 
+def _format_report_timestamp(path: Path) -> Optional[str]:
+    match = REPORT_TIMESTAMP_RE.search(path.stem)
+    if not match:
+        return None
+    raw = match.group("stamp")
+    return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]} {raw[9:11]}:{raw[11:13]}"
+
+
+def _extract_stock_labels(markdown_text: str) -> list[str]:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for match in STOCK_LABEL_RE.finditer(markdown_text):
+        name = re.sub(r"\s+", " ", match.group("name")).strip()
+        code = match.group("code").strip()
+        if not name or not code:
+            continue
+        label = f"{name}({code})"
+        if label not in seen:
+            labels.append(label)
+            seen.add(label)
+    return labels
+
+
+def _stock_title_from_labels(path: Path, stock_labels: list[str]) -> Optional[str]:
+    if not stock_labels:
+        return None
+
+    date_label = _format_report_timestamp(path) or _format_report_date(path)
+    if len(stock_labels) == 1:
+        return f"{stock_labels[0]} - {date_label}"
+    if len(stock_labels) <= 3:
+        return f"{'、'.join(stock_labels)} - {date_label}"
+    return f"{'、'.join(stock_labels[:2])} 等 {len(stock_labels)} 只股票 - {date_label}"
+
+
 def _first_heading(markdown_text: str) -> Optional[str]:
     for line in markdown_text.splitlines():
         stripped = line.strip()
@@ -93,6 +132,11 @@ def _kind_for_report(path: Path) -> tuple[str, str]:
 
 def _page_title(path: Path, markdown_text: str) -> str:
     kind, _ = _kind_for_report(path)
+    if kind == "stock":
+        stock_title = _stock_title_from_labels(path, _extract_stock_labels(markdown_text))
+        if stock_title:
+            return stock_title
+
     heading = _first_heading(markdown_text)
     if heading:
         return heading
