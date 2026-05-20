@@ -94,14 +94,15 @@ def test_daily_analysis_workflow_publishes_pages_when_reports_exist() -> None:
     steps = analyze_job["steps"]
     step_by_name = {step.get("name"): step for step in steps}
 
+    assert workflow["permissions"]["contents"] == "write"
     assert workflow["permissions"]["pages"] == "write"
     assert workflow["permissions"]["id-token"] == "write"
     assert analyze_job["outputs"]["has_reports"] == "${{ steps.report_site.outputs.has_reports }}"
-    assert step_by_name["恢复历史报告归档"]["uses"] == "actions/cache/restore@v4"
+    assert "report-archive" in step_by_name["恢复持久历史报告归档"]["run"]
     assert step_by_name["合并本次报告到历史归档"]["id"] == "report_archive"
     assert "--reports-dir reports-archive" in step_by_name["生成 HTML 报告站点"]["run"]
     assert step_by_name["生成 HTML 报告站点"]["id"] == "report_site"
-    assert step_by_name["保存历史报告归档"]["uses"] == "actions/cache/save@v4"
+    assert "git push origin report-archive" in step_by_name["保存历史报告到持久分支"]["run"]
     assert step_by_name["配置 GitHub Pages"]["uses"] == "actions/configure-pages@v6"
     assert step_by_name["上传 Pages 站点"]["uses"] == "actions/upload-pages-artifact@v5"
     assert step_by_name["上传 Pages 站点"]["if"] == "steps.report_site.outputs.has_reports == 'true'"
