@@ -20,6 +20,11 @@ REPORT_TIMESTAMP_RE = re.compile(r"(?P<stamp>\d{8}-\d{6})")
 STOCK_LABEL_RE = re.compile(
     r"\*\*(?P<name>[^*\n()（）]{1,80})\s*[(（](?P<code>[A-Za-z0-9._-]{2,20})[)）]\*\*"
 )
+MARKET_SCOPE_PATTERNS = (
+    ("A股", ("A股", "A 股", "A-share", "A Share", "cn")),
+    ("港股", ("港股", "HK Market", "Hong Kong", "hk")),
+    ("美股", ("美股", "US Market", "U.S. Market", "us")),
+)
 SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 MARKDOWN_EXTRAS = ["tables", "fenced-code-blocks", "break-on-newline", "cuddled-lists"]
 
@@ -116,6 +121,23 @@ def _stock_title_from_labels(path: Path, stock_labels: list[str]) -> Optional[st
     return f"{'、'.join(stock_labels[:2])} 等 {len(stock_labels)} 只股票 - {date_label}"
 
 
+def _extract_market_scopes(path: Path, markdown_text: str) -> list[str]:
+    haystack = f"{path.stem}\n{markdown_text}"
+    scopes: list[str] = []
+    for label, patterns in MARKET_SCOPE_PATTERNS:
+        if any(pattern in haystack for pattern in patterns):
+            scopes.append(label)
+    return scopes
+
+
+def _market_title(path: Path, markdown_text: str) -> str:
+    date_label = _format_report_timestamp(path) or _format_report_date(path)
+    scopes = _extract_market_scopes(path, markdown_text)
+    if scopes:
+        return f"{'、'.join(scopes)}大盘复盘 - {date_label}"
+    return f"大盘复盘 - {date_label}"
+
+
 def _first_heading(markdown_text: str) -> Optional[str]:
     for line in markdown_text.splitlines():
         stripped = line.strip()
@@ -136,6 +158,8 @@ def _page_title(path: Path, markdown_text: str) -> str:
         stock_title = _stock_title_from_labels(path, _extract_stock_labels(markdown_text))
         if stock_title:
             return stock_title
+    elif kind == "market":
+        return _market_title(path, markdown_text)
 
     heading = _first_heading(markdown_text)
     if heading:

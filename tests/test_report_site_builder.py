@@ -28,7 +28,7 @@ def test_build_report_site_creates_index_and_report_pages(tmp_path: Path) -> Non
         encoding="utf-8",
     )
     (reports_dir / "market_review_20260519.md").write_text(
-        "# 大盘复盘\n\n> 市场缩量震荡。",
+        "# 大盘复盘\n\n# A股大盘复盘\n\n> 市场缩量震荡。",
         encoding="utf-8",
     )
 
@@ -47,6 +47,7 @@ def test_build_report_site_creates_index_and_report_pages(tmp_path: Path) -> Non
     assert "最新股票分析报告" in index
     assert "最新大盘分析报告" in index
     assert "贵州茅台(600519) - 2026-05-19 18:30" in index
+    assert "A股大盘复盘 - 2026-05-19" in index
     assert "reports/report_20260519_20260519-183000_run-1_attempt-1.html" in index
     assert "reports/market_review_20260519.html" in index
     assert (output_dir / ".nojekyll").exists()
@@ -71,6 +72,30 @@ def test_build_report_site_names_multi_stock_reports_from_stock_labels(tmp_path:
 
     index = (output_dir / "index.html").read_text(encoding="utf-8")
     assert "中科曙光(603019)、贵州茅台(600519)、宁德时代(300750) - 2026-05-20 23:56" in index
+
+
+def test_build_report_site_names_market_reports_from_scope_and_timestamp(tmp_path: Path) -> None:
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    (reports_dir / "market_review_20260520_hk_us_20260520-235602_run-2_attempt-1.md").write_text(
+        "# 🎯 大盘复盘\n\n# 港股大盘复盘\n\n复盘正文\n\n---\n\n# 美股大盘复盘\n\n复盘正文",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "site"
+    build_report_site.build_report_site(reports_dir=reports_dir, output_dir=output_dir)
+
+    index = (output_dir / "index.html").read_text(encoding="utf-8")
+    assert "港股、美股大盘复盘 - 2026-05-20 23:56" in index
+
+
+def test_daily_analysis_archives_market_report_with_region_in_filename() -> None:
+    workflow = yaml.safe_load((ROOT_DIR / ".github/workflows/daily_analysis.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["analyze"]["steps"]
+    archive_step = next(step for step in steps if step.get("id") == "report_archive")
+
+    assert "MARKET_REVIEW_REGION" in archive_step["run"]
+    assert "market_review_*" in archive_step["run"]
 
 
 def test_build_report_site_escapes_raw_html(tmp_path: Path) -> None:

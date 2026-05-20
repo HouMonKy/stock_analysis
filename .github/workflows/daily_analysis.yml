@@ -503,6 +503,10 @@ jobs:
           shopt -s nullglob
           for file in reports/*.md; do
             name="$(basename "$file" .md)"
+            if [[ "$name" == market_review_* ]] && [ -n "${MARKET_REVIEW_REGION:-}" ]; then
+              safe_region="$(printf '%s' "$MARKET_REVIEW_REGION" | tr -c '[:alnum:]_-' '-')"
+              name="${name}_${safe_region}"
+            fi
             dest="reports-archive/${name}_${stamp}_run-${GITHUB_RUN_NUMBER}_attempt-${GITHUB_RUN_ATTEMPT}.md"
             cp "$file" "$dest"
             current_count=$((current_count + 1))
